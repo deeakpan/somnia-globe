@@ -6,9 +6,13 @@
     "dev": "next dev --webpack",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "tracker": "tsx server/tracker.ts",
+    "tracker:js": "node server/tracker.js"
   },
   "dependencies": {
+    "@somnia-chain/streams": "^0.10.5",
+    "@supabase/supabase-js": "^2.81.1",
     "@turf/centroid": "^7.2.0",
     "@turf/helpers": "^7.2.0",
     "@types/d3": "^7.4.3",
@@ -38,6 +42,8 @@
     "ethers": "^6.15.0",
     "hardhat": "^3.0.14",
     "tailwindcss": "^4",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.6",
     "typescript": "^5"
   }
 }
