@@ -4,11 +4,11 @@ export default function Home() {
       <div className="text-center">
         <h1 className="text-6xl font-bold text-slate-900 mb-4">
           Coming Soon
-        </h1>
+          </h1>
         <p className="text-xl text-slate-600">
           Somlink is launching soon
-        </p>
-      </div>
+          </p>
+        </div>
     </div>
   );
 }

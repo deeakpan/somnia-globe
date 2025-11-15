@@ -3,6 +3,8 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import centroid from '@turf/centroid';
+import { Feature, Geometry } from 'geojson';
 
 const COUNTRIES_GEOJSON_URL = 'https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_50m_admin_0_countries.geojson';
 
@@ -12,14 +14,15 @@ const Map = () => {
   const countriesLayerRef = useRef<L.GeoJSON | null>(null);
   const labelsLayerRef = useRef<L.LayerGroup | null>(null);
   const labelMarkersRef = useRef<Record<string, L.Marker>>({});
+  const countryDataRef = useRef<Record<string, { center: L.LatLng; area: number }>>({});
 
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
     // Initialize map
     const map = L.map(mapContainerRef.current, {
-      center: [45, 20],
-      zoom: 1,
+      center: [20, 0],
+      zoom: 2,
       zoomControl: true,
       attributionControl: true,
       minZoom: 2,
@@ -41,7 +44,6 @@ const Map = () => {
       subdomains: 'abcd'
     }).addTo(map);
 
-    // Force the map to stay full screen
     const forceFullScreen = () => {
       const container = mapContainerRef.current;
       if (container) {
@@ -51,13 +53,11 @@ const Map = () => {
       }
     };
 
-    // Call on mount and window resize
     forceFullScreen();
     window.addEventListener('resize', forceFullScreen);
 
     mapRef.current = map;
     
-    // Create labels layer group
     const labelsLayer = L.layerGroup().addTo(map);
     labelsLayerRef.current = labelsLayer;
 
@@ -68,9 +68,8 @@ const Map = () => {
       const zoom = map.getZoom();
       const bounds = map.getBounds();
       
-      // Only show labels when zoomed in (zoom >= 4)
-      if (zoom < 4) {
-        // Hide all labels
+      // Show labels starting from zoom 3
+      if (zoom < 3) {
         Object.values(labelMarkersRef.current).forEach(marker => {
           if (labelsLayerRef.current) {
             labelsLayerRef.current.removeLayer(marker);
@@ -79,53 +78,46 @@ const Map = () => {
         return;
       }
       
-      // Collect visible countries with their centers and areas
+      // Collect visible countries
       const visibleCountries: Array<{
         name: string;
         center: L.LatLng;
-        bounds: L.LatLngBounds;
         area: number;
       }> = [];
       
-      countriesLayerRef.current.eachLayer((layer: any) => {
-        const feature = layer.feature;
-        if (!feature?.properties?.name || !layer.getBounds) return;
-        
-        const layerBounds = layer.getBounds();
-        if (!bounds.intersects(layerBounds)) return;
-        
-        // Calculate approximate area (in meters squared)
-        const ne = layerBounds.getNorthEast();
-        const sw = layerBounds.getSouthWest();
-        const area = ne.distanceTo([ne.lat, sw.lng]) * sw.distanceTo([sw.lat, ne.lng]);
-        
-        visibleCountries.push({
-          name: feature.properties.name,
-          center: layerBounds.getCenter(),
-          bounds: layerBounds,
-          area: area
-        });
+      Object.keys(countryDataRef.current).forEach(countryName => {
+        const data = countryDataRef.current[countryName];
+        if (bounds.contains(data.center)) {
+          visibleCountries.push({
+            name: countryName,
+            center: data.center,
+            area: data.area
+          });
+        }
       });
       
-      // Sort by area (largest first) - prioritize showing larger countries
+      // Sort by area (largest first)
       visibleCountries.sort((a, b) => b.area - a.area);
       
-      // Calculate minimum distance between labels based on zoom
-      // Much more aggressive spacing when zoomed out to prevent clustering
-      const minDistance = zoom >= 6 ? 50000 : zoom >= 5 ? 150000 : zoom >= 4 ? 400000 : 800000;
+      // Adaptive spacing and limits based on zoom
+      const minDistance = zoom >= 7 ? 30000 : 
+                         zoom >= 6 ? 80000 : 
+                         zoom >= 5 ? 200000 : 
+                         zoom >= 4 ? 500000 : 1000000;
       
-      // Limit total number of labels at lower zoom levels
-      const maxLabels = zoom >= 6 ? Infinity : zoom >= 5 ? 50 : zoom >= 4 ? 30 : 15;
+      const maxLabels = zoom >= 7 ? Infinity : 
+                       zoom >= 6 ? 80 : 
+                       zoom >= 5 ? 50 : 
+                       zoom >= 4 ? 30 : 20;
       
       const placedLabels: L.LatLng[] = [];
       let labelCount = 0;
       
       // Show labels with collision detection
       visibleCountries.forEach((country) => {
-        // Limit total labels at lower zoom levels
         if (labelCount >= maxLabels) return;
         
-        // Check if too close to existing labels
+        // Check collision
         let tooClose = false;
         for (const placed of placedLabels) {
           if (country.center.distanceTo(placed) < minDistance) {
@@ -140,7 +132,6 @@ const Map = () => {
         let labelMarker = labelMarkersRef.current[country.name];
         
         if (!labelMarker) {
-          // Create new label marker
           const divIcon = L.divIcon({
             className: 'country-label-marker',
             html: `<div class="country-label-text">${country.name}</div>`,
@@ -158,7 +149,6 @@ const Map = () => {
           labelMarkersRef.current[country.name] = labelMarker;
         }
         
-        // Update position and add to map
         if (labelsLayerRef.current) {
           labelMarker.setLatLng(country.center);
           if (!labelsLayerRef.current.hasLayer(labelMarker)) {
@@ -175,13 +165,11 @@ const Map = () => {
         const isStillVisible = visibleCountries.some(c => c.name === countryName);
         if (!isStillVisible && labelsLayerRef.current && labelsLayerRef.current.hasLayer(marker)) {
           labelsLayerRef.current.removeLayer(marker);
-        }
+          }
       });
     };
 
-    // Wait for map to be ready before adding layers
     map.whenReady(() => {
-      // Fetch and add real country polygons
       fetch(COUNTRIES_GEOJSON_URL)
         .then(res => res.json())
         .then((geojson) => {
@@ -193,9 +181,41 @@ const Map = () => {
               fillOpacity: 0.3
             },
             onEachFeature: (feature, layer) => {
-              if (!feature?.properties?.name) return;
+              if (!feature?.properties?.name || !feature.geometry) return;
 
-              // Add tooltip with country name
+              // Calculate proper geometric centroid using turf
+              try {
+                const center = centroid(feature as Feature<Geometry>);
+                let [lng, lat] = center.geometry.coordinates;
+                
+                // Manual adjustments for specific countries
+                const countryName = feature.properties.name;
+                if (countryName === 'United States of America' || countryName === 'United States') {
+                  // Adjust US label to be more centered (shift south and right)
+                  lat = lat - 3; // Shift south
+                  lng = lng + 8; // Shift right significantly
+                } else if (countryName === 'Canada') {
+                  // Adjust Canada label to be more centered (shift south and left)
+                  lat = lat - 5; // Shift south significantly
+                  lng = lng - 10; // Shift left by a lot
+                }
+                
+                // Calculate area
+                const layerBounds = (layer as any).getBounds();
+                const ne = layerBounds.getNorthEast();
+                const sw = layerBounds.getSouthWest();
+                const area = ne.distanceTo([ne.lat, sw.lng]) * sw.distanceTo([sw.lat, ne.lng]);
+                
+                // Store country data
+                countryDataRef.current[countryName] = {
+                  center: L.latLng(lat, lng),
+                  area: area
+                };
+              } catch (error) {
+                console.error(`Error calculating centroid for ${feature.properties.name}:`, error);
+              }
+
+              // Add tooltip
               layer.bindTooltip(feature.properties.name, {
                 permanent: false,
                 direction: 'top',
@@ -218,12 +238,11 @@ const Map = () => {
 
           countriesLayerRef.current = geoJsonLayer;
           
-          // Initial label update after a brief delay
+          // Initial label update
           setTimeout(() => {
             updateLabelVisibility();
           }, 200);
           
-          // Update labels when zoom or pan changes
           map.on('zoomend', updateLabelVisibility);
           map.on('moveend', updateLabelVisibility);
         })
