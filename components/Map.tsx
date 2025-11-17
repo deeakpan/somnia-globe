@@ -18,6 +18,13 @@ const Map = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectsByCountry, setProjectsByCountry] = useState<Record<string, Project[]>>({});
   const [currentZoom, setCurrentZoom] = useState(2);
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const projectsByCountryRef = useRef<Record<string, Project[]>>({});
+  
+  // Keep ref in sync with state
+  useEffect(() => {
+    projectsByCountryRef.current = projectsByCountry;
+  }, [projectsByCountry]);
 
   // Fetch projects from Supabase
   useEffect(() => {
@@ -78,8 +85,11 @@ const Map = () => {
     const zoom = mapRef.current.getZoom();
     labelsLayerRef.current.clearLayers();
 
-    // Show labels when zoomed in (zoom >= 4)
-    if (zoom >= 4) {
+    // Show labels at default zoom level (zoom >= 2) so they're visible immediately
+    if (zoom >= 2) {
+      // Use ref to get current projectsByCountry for consistency
+      const currentProjectsByCountry = projectsByCountryRef.current;
+      
       countriesLayerRef.current.eachLayer((layer) => {
         const feature = (layer as any).feature;
         if (!feature?.properties?.name || !feature.geometry) return;
@@ -88,8 +98,8 @@ const Map = () => {
         const isoCode = getISOCode(feature, countryName);
         
         // Only show labels for countries with projects
-        if (isoCode && projectsByCountry[isoCode]) {
-          const countryProjects = projectsByCountry[isoCode];
+        if (isoCode && currentProjectsByCountry[isoCode]) {
+          const countryProjects = currentProjectsByCountry[isoCode];
           // Show the primary project name (first/highest ranked)
           const primaryProject = countryProjects[0];
           const projectName = primaryProject.project_name;
@@ -110,7 +120,7 @@ const Map = () => {
         }
       });
     }
-  }, [projectsByCountry, getISOCode]);
+  }, [getISOCode]);
 
   // Function to update country colors and markers based on projects
   const updateMapWithProjects = useCallback(() => {
@@ -245,18 +255,65 @@ const Map = () => {
     const handleZoomEnd = () => {
       const newZoom = map.getZoom();
       setCurrentZoom(newZoom);
+      // Always update labels at zoom end to ensure they're shown
+      if (newZoom >= 2) {
+        // Clear any pending timeouts and update immediately
+        if (updateTimeoutRef.current) {
+          clearTimeout(updateTimeoutRef.current);
+          updateTimeoutRef.current = null;
+        }
+        updateCountryLabels();
+      } else {
+        // Clear labels if zoomed out too far
+        if (labelsLayerRef.current) {
+          labelsLayerRef.current.clearLayers();
+        }
+      }
+    };
+    
+    const handleZoom = () => {
+      // Update labels during zoom (not just at end) for smoother experience
+      const zoom = map.getZoom();
+      if (zoom >= 2) {
+        // Update immediately when zooming back out to show labels quickly
+        // Throttle only when zooming in to prevent excessive re-renders
+        if (updateTimeoutRef.current) {
+          clearTimeout(updateTimeoutRef.current);
+        }
+        // Shorter throttle for smoother experience
+        updateTimeoutRef.current = setTimeout(() => {
+          updateCountryLabels();
+        }, 50);
+      } else {
+        // Clear labels immediately when zoomed out too far
+        if (labelsLayerRef.current) {
+          labelsLayerRef.current.clearLayers();
+        }
+      }
     };
     
     const handleMoveEnd = () => {
       // Trigger label update on move (for visibility changes)
-      if (map.getZoom() >= 4) {
-        setTimeout(() => {
+      if (map.getZoom() >= 2) {
+        updateCountryLabels();
+      }
+    };
+    
+    const handleMove = () => {
+      // Update labels during panning to keep them visible (throttled)
+      if (map.getZoom() >= 2) {
+        if (updateTimeoutRef.current) {
+          clearTimeout(updateTimeoutRef.current);
+        }
+        updateTimeoutRef.current = setTimeout(() => {
           updateCountryLabels();
-        }, 50);
+        }, 150);
       }
     };
 
+    map.on('zoom', handleZoom);
     map.on('zoomend', handleZoomEnd);
+    map.on('move', handleMove);
     map.on('moveend', handleMoveEnd);
 
     map.whenReady(() => {
@@ -275,9 +332,44 @@ const Map = () => {
 
               // Add click interaction
               layer.on('click', function () {
+                // First, restore all countries to their project colors
                 if (countriesLayerRef.current) {
-                  countriesLayerRef.current.resetStyle();
+                  countriesLayerRef.current.eachLayer((countryLayer) => {
+                    const countryFeature = (countryLayer as any).feature;
+                    if (!countryFeature?.properties?.name) return;
+                    
+                    const countryName = countryFeature.properties.name;
+                    const isoCode = getISOCode(countryFeature, countryName);
+                    
+                    // Use ref to get current projectsByCountry
+                    const currentProjectsByCountry = projectsByCountryRef.current;
+                    
+                    if (isoCode && currentProjectsByCountry[isoCode]) {
+                      const countryProjects = currentProjectsByCountry[isoCode];
+                      const primaryProject = countryProjects[0];
+                      const category = primaryProject.category;
+                      const color = getCategoryColor(category);
+                      
+                      // Restore project color
+                      (countryLayer as L.Path).setStyle({
+                        fillColor: color,
+                        fillOpacity: 0.6,
+                        color: color,
+                        weight: 1,
+                      });
+                    } else {
+                      // Default style for countries without projects
+                      (countryLayer as L.Path).setStyle({
+                        fillColor: '#1a1a1a',
+                        fillOpacity: 0.3,
+                        color: '#ffffff',
+                        weight: 1,
+                      });
+                    }
+                  });
                 }
+                
+                // Then highlight the clicked country
                 (layer as L.Path).setStyle({ 
                   fillColor: '#FF6666', 
                   color: '#ffffff', 
