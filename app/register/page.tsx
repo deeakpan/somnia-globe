@@ -152,12 +152,15 @@ export default function RegisterPage() {
       newErrors.push({ field: 'discord', message: 'Invalid Discord URL' });
     }
 
-    if (formData.website && !isValidUrl(formData.website)) {
-      newErrors.push({ field: 'website', message: 'Invalid website URL' });
-    }
-
     if (formData.github && !isValidUrl(formData.github)) {
       newErrors.push({ field: 'github', message: 'Invalid GitHub URL' });
+    }
+
+    // Website is required
+    if (!formData.website || !formData.website.trim()) {
+      newErrors.push({ field: 'website', message: 'Website is required' });
+    } else if (!isValidUrl(formData.website)) {
+      newErrors.push({ field: 'website', message: 'Invalid website URL' });
     }
 
     setErrors(newErrors);
@@ -417,12 +420,12 @@ export default function RegisterPage() {
 
           {/* Social Links Section */}
           <div className="space-y-6">
-            <h2 className="text-xl font-light text-white/90">Social Links <span className="text-gray-500 text-sm font-normal ml-2">Optional</span></h2>
+            <h2 className="text-xl font-light text-white/90">Social Links</h2>
             
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <label htmlFor="website" className="block text-sm font-medium text-gray-300">
-                  Website
+                  Website <span className="text-red-400">*</span>
                 </label>
                 <input
                   type="url"
@@ -441,7 +444,7 @@ export default function RegisterPage() {
 
               <div className="space-y-2">
                 <label htmlFor="twitter" className="block text-sm font-medium text-gray-300">
-                  Twitter
+                  Twitter <span className="text-gray-500 text-xs font-normal">(Optional)</span>
                 </label>
                 <input
                   type="url"
@@ -460,7 +463,7 @@ export default function RegisterPage() {
 
               <div className="space-y-2">
                 <label htmlFor="discord" className="block text-sm font-medium text-gray-300">
-                  Discord
+                  Discord <span className="text-gray-500 text-xs font-normal">(Optional)</span>
                 </label>
                 <input
                   type="url"
@@ -479,7 +482,7 @@ export default function RegisterPage() {
 
               <div className="space-y-2">
                 <label htmlFor="github" className="block text-sm font-medium text-gray-300">
-                  GitHub
+                  GitHub <span className="text-gray-500 text-xs font-normal">(Optional)</span>
                 </label>
                 <input
                   type="url"

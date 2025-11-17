@@ -89,3 +89,28 @@ body {
   transform: translateX(-50%) !important;
   left: 0 !important;
 }
+
+/* Dark popup styling */
+.leaflet-popup-content-wrapper {
+  background: #1a1a1d !important;
+  color: #fff !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+}
+
+.leaflet-popup-tip {
+  background: #1a1a1d !important;
+}
+
+.leaflet-popup-content {
+  margin: 0 !important;
+  color: #fff !important;
+}
+
+.leaflet-popup-close-button {
+  color: #9ca3af !important;
+}
+
+.leaflet-popup-close-button:hover {
+  color: #fff !important;
+}

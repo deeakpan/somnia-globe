@@ -2,13 +2,18 @@
   "name": "somlink",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "tracker": "tsx server/tracker.ts",
-    "tracker:js": "node server/tracker.js"
+    "tracker:js": "node server/tracker.js",
+    "compile": "hardhat compile",
+    "deploy": "hardhat run scripts/deploy.ts --network somnia_testnet",
+    "deploy:local": "hardhat run scripts/deploy.ts --network hardhat",
+    "interact:nft": "tsx scripts/interact-nft.ts"
   },
   "dependencies": {
     "@somnia-chain/streams": "^0.10.5",

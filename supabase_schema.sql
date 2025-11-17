@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS projects (
   
   -- Volume tracking (real-time)
   unique_wallets INTEGER DEFAULT 0, -- Count of unique wallet addresses that interacted
+  wallet_addresses JSONB DEFAULT '[]'::jsonb, -- Array of unique wallet addresses (for deduplication)
   total_transactions INTEGER DEFAULT 0, -- Total transaction count
   last_interaction_at TIMESTAMPTZ, -- Last time any interaction occurred
   
@@ -42,6 +43,7 @@ CREATE INDEX IF NOT EXISTS idx_projects_ranking ON projects(ranking) WHERE ranki
 CREATE INDEX IF NOT EXISTS idx_projects_country_iso ON projects(country_iso) WHERE country_iso IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_projects_unique_wallets ON projects(unique_wallets DESC);
 CREATE INDEX IF NOT EXISTS idx_projects_category ON projects(category);
+CREATE INDEX IF NOT EXISTS idx_projects_wallet_addresses ON projects USING GIN (wallet_addresses);
 
 -- Index for querying top 194 projects
 CREATE INDEX IF NOT EXISTS idx_projects_top_194 ON projects(unique_wallets DESC, ranking) 

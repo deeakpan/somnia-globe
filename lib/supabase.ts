@@ -63,7 +63,6 @@ export interface Project {
     github?: string;
   };
   unique_wallets: number;
-  wallet_addresses?: string[] | null;
   total_transactions: number;
   last_interaction_at?: string;
   ranking?: number;
@@ -121,52 +120,45 @@ export async function getProjectByContractAddress(
 }
 
 /**
- * Update project volume (unique wallets and transactions)
- * This is called when a new event is detected
+ * Batch update project volumes (called during cleanup)
+ * Updates multiple projects at once with their current counts
+ * This replaces the old per-transaction update approach for better performance
  */
-export async function updateProjectVolume(
-  projectId: string,
-  walletAddress: string
-): Promise<boolean> {
-  const normalizedAddress = walletAddress.toLowerCase();
-  
-  // Fetch current wallet_addresses JSONB array
-  const { data: project, error: fetchError } = await supabase
-    .from('projects')
-    .select('wallet_addresses')
-    .eq('id', projectId)
-    .single();
-
-  if (fetchError) {
-    console.error('Error fetching project:', fetchError);
-    throw fetchError;
+export async function batchUpdateProjectVolumes(
+  updates: Array<{
+    projectId: string;
+    uniqueWallets: number;
+    totalTransactions: number;
+    lastInteractionAt: string;
+  }>
+): Promise<void> {
+  if (updates.length === 0) {
+    return;
   }
 
-  // Check and update in JavaScript
-  const wallets = (project.wallet_addresses as string[]) || [];
-  const isNewWallet = !wallets.includes(normalizedAddress);
+  // Update each project
+  const updatePromises = updates.map((update) =>
+    supabase
+      .from('projects')
+      .update({
+        unique_wallets: update.uniqueWallets,
+        total_transactions: update.totalTransactions,
+        last_interaction_at: update.lastInteractionAt,
+      })
+      .eq('id', update.projectId)
+  );
 
-  if (isNewWallet) {
-    wallets.push(normalizedAddress);
-  }
+  const results = await Promise.allSettled(updatePromises);
 
-  // Update JSONB column directly
-  const { error: updateError } = await supabase
-    .from('projects')
-    .update({
-      wallet_addresses: wallets,
-      unique_wallets: wallets.length,
-      total_transactions: supabase.raw('total_transactions + 1'),
-      last_interaction_at: new Date().toISOString(),
-    })
-    .eq('id', projectId);
+  // Log any errors
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      console.error(`Error updating project ${updates[index].projectId}:`, result.reason);
+    }
+  });
 
-  if (updateError) {
-    console.error('Error updating project volume:', updateError);
-    throw updateError;
-  }
-
-  return isNewWallet;
+  const successCount = results.filter((r) => r.status === 'fulfilled').length;
+  console.log(`   Updated ${successCount}/${updates.length} project(s) in Supabase`);
 }
 
 /**

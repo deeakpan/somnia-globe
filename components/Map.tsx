@@ -5,6 +5,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { getTop194Projects, Project } from '@/lib/supabase';
 import { getCategoryColor } from '@/lib/category-colors';
+import { centroid } from '@turf/centroid';
 
 const COUNTRIES_GEOJSON_URL = 'https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_50m_admin_0_countries.geojson';
 
@@ -13,8 +14,10 @@ const Map = () => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const countriesLayerRef = useRef<L.GeoJSON | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
+  const labelsLayerRef = useRef<L.LayerGroup | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectsByCountry, setProjectsByCountry] = useState<Record<string, Project[]>>({});
+  const [currentZoom, setCurrentZoom] = useState(2);
 
   // Fetch projects from Supabase
   useEffect(() => {
@@ -68,6 +71,47 @@ const Map = () => {
     return nameToISO[countryName] || null;
   }, []);
 
+  // Function to update country labels based on zoom level
+  const updateCountryLabels = useCallback(() => {
+    if (!countriesLayerRef.current || !labelsLayerRef.current || !mapRef.current) return;
+
+    const zoom = mapRef.current.getZoom();
+    labelsLayerRef.current.clearLayers();
+
+    // Show labels when zoomed in (zoom >= 4)
+    if (zoom >= 4) {
+      countriesLayerRef.current.eachLayer((layer) => {
+        const feature = (layer as any).feature;
+        if (!feature?.properties?.name || !feature.geometry) return;
+
+        const countryName = feature.properties.name;
+        const isoCode = getISOCode(feature, countryName);
+        
+        // Only show labels for countries with projects
+        if (isoCode && projectsByCountry[isoCode]) {
+          const countryProjects = projectsByCountry[isoCode];
+          // Show the primary project name (first/highest ranked)
+          const primaryProject = countryProjects[0];
+          const projectName = primaryProject.project_name;
+          
+          const centroidPoint = centroid(feature.geometry);
+          const labelLat = centroidPoint.geometry.coordinates[1];
+          const labelLng = centroidPoint.geometry.coordinates[0];
+          
+          const labelDiv = L.divIcon({
+            className: 'country-label-marker',
+            html: `<div class="country-label-text">${projectName}</div>`,
+            iconSize: [150, 20],
+            iconAnchor: [75, 10],
+          });
+          
+          L.marker([labelLat, labelLng], { icon: labelDiv })
+            .addTo(labelsLayerRef.current!);
+        }
+      });
+    }
+  }, [projectsByCountry, getISOCode]);
+
   // Function to update country colors and markers based on projects
   const updateMapWithProjects = useCallback(() => {
     if (!countriesLayerRef.current || !markersLayerRef.current) return;
@@ -99,9 +143,9 @@ const Map = () => {
           weight: 1,
         });
 
-        // Add marker with project count
-        const bounds = (layer as any).getBounds();
-        const center = bounds.getCenter();
+        // Calculate accurate centroid using Turf.js
+        const centroidPoint = centroid(feature.geometry);
+        const center = L.latLng(centroidPoint.geometry.coordinates[1], centroidPoint.geometry.coordinates[0]);
         
         const marker = L.circleMarker(center, {
           radius: Math.min(8 + countryProjects.length * 2, 20),
@@ -111,21 +155,26 @@ const Map = () => {
           fillOpacity: 0.8,
         });
 
-        // Create popup with project info
+        // Create dark-themed popup with project info
         const popupContent = `
-          <div style="color: #000; min-width: 200px;">
-            <h3 style="margin: 0 0 8px 0; font-weight: bold;">${countryName}</h3>
-            <p style="margin: 0 0 4px 0; color: #666;">${countryProjects.length} project${countryProjects.length > 1 ? 's' : ''}</p>
+          <div style="color: #fff; min-width: 250px; background: #1a1a1d; padding: 12px; border-radius: 8px;">
+            <h3 style="margin: 0 0 8px 0; font-weight: bold; color: #fff; font-size: 16px;">${countryName}</h3>
+            <p style="margin: 0 0 12px 0; color: #9ca3af; font-size: 13px;">${countryProjects.length} project${countryProjects.length > 1 ? 's' : ''}</p>
             ${countryProjects.map(p => `
-              <div style="margin: 4px 0; padding: 4px; background: #f0f0f0; border-radius: 4px;">
-                <strong>${p.project_name}</strong><br/>
-                <span style="font-size: 0.85em; color: #666;">${p.category} • ${p.unique_wallets} wallets</span>
+              <div style="margin: 8px 0; padding: 10px; background: #262629; border-radius: 6px; border-left: 3px solid ${color};">
+                <strong style="color: #fff; font-size: 14px; display: block; margin-bottom: 4px;">${p.project_name}</strong>
+                <span style="font-size: 12px; color: #9ca3af;">${p.category} • ${p.unique_wallets} wallets</span>
+                ${p.description ? `<p style="font-size: 11px; color: #6b7280; margin: 4px 0 0 0; line-height: 1.4;">${p.description.substring(0, 100)}${p.description.length > 100 ? '...' : ''}</p>` : ''}
+                ${p.socials?.website ? `<a href="${p.socials.website}" target="_blank" style="color: ${color}; font-size: 11px; text-decoration: none; margin-top: 4px; display: inline-block;">Visit Website →</a>` : ''}
               </div>
             `).join('')}
           </div>
         `;
         
-        marker.bindPopup(popupContent);
+        marker.bindPopup(popupContent, {
+          className: 'dark-popup',
+          maxWidth: 300,
+        });
         marker.addTo(markersLayerRef.current);
       } else {
         // Default style for countries without projects
@@ -137,7 +186,10 @@ const Map = () => {
         });
       }
     });
-  }, [projectsByCountry, getISOCode]);
+
+    // Update labels after markers
+    updateCountryLabels();
+  }, [projectsByCountry, getISOCode, updateCountryLabels]);
 
   useEffect(() => {
     if (!mapContainerRef.current) return;
@@ -184,6 +236,28 @@ const Map = () => {
     // Create markers layer
     const markersLayer = L.layerGroup().addTo(map);
     markersLayerRef.current = markersLayer;
+
+    // Create labels layer
+    const labelsLayer = L.layerGroup().addTo(map);
+    labelsLayerRef.current = labelsLayer;
+
+    // Update labels on zoom and move
+    const handleZoomEnd = () => {
+      const newZoom = map.getZoom();
+      setCurrentZoom(newZoom);
+    };
+    
+    const handleMoveEnd = () => {
+      // Trigger label update on move (for visibility changes)
+      if (map.getZoom() >= 4) {
+        setTimeout(() => {
+          updateCountryLabels();
+        }, 50);
+      }
+    };
+
+    map.on('zoomend', handleZoomEnd);
+    map.on('moveend', handleMoveEnd);
 
     map.whenReady(() => {
       fetch(COUNTRIES_GEOJSON_URL)
@@ -240,6 +314,13 @@ const Map = () => {
       }, 100);
     }
   }, [projects, projectsByCountry, updateMapWithProjects]);
+
+  // Update labels when zoom changes
+  useEffect(() => {
+    if (mapRef.current && labelsLayerRef.current) {
+      updateCountryLabels();
+    }
+  }, [currentZoom, updateCountryLabels]);
 
   return (
     <div className="w-full h-full">

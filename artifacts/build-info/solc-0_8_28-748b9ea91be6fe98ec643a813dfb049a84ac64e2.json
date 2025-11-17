@@ -1,0 +1,47 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_28-748b9ea91be6fe98ec643a813dfb049a84ac64e2",
+  "solcVersion": "0.8.28",
+  "solcLongVersion": "0.8.28+commit.7893614a",
+  "userSourceNameMap": {
+    "contracts/MappableGames.sol": "project/contracts/MappableGames.sol",
+    "contracts/MappableNFTs.sol": "project/contracts/MappableNFTs.sol",
+    "contracts/MappableStores.sol": "project/contracts/MappableStores.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "cancun",
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode",
+            "evm.deployedBytecode",
+            "evm.methodIdentifiers",
+            "metadata"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/MappableGames.sol": {
+        "content": "// SPDX-License-Identifier: MIT\r\npragma solidity ^0.8.28;\r\n\r\n/**\r\n * @title MappableGames\r\n * @dev Contract for gaming interactions that emit events for tracking\r\n */\r\ncontract MappableGames {\r\n    event GameStarted(address indexed player, uint256 indexed gameId, uint256 betAmount);\r\n    event GameCompleted(address indexed player, uint256 indexed gameId, bool won, uint256 reward);\r\n\r\n    mapping(uint256 => address) public gamePlayer;\r\n    mapping(address => uint256) public playerGamesCount;\r\n    uint256 public totalGames;\r\n    uint256 public gameCounter;\r\n\r\n    /**\r\n     * @dev Start a new game\r\n     * @param gameId The unique game identifier\r\n     */\r\n    function startGame(uint256 gameId) external payable {\r\n        require(msg.value > 0, \"Must bet something\");\r\n        require(gamePlayer[gameId] == address(0), \"Game already started\");\r\n\r\n        gamePlayer[gameId] = msg.sender;\r\n        playerGamesCount[msg.sender]++;\r\n        totalGames++;\r\n        gameCounter++;\r\n\r\n        emit GameStarted(msg.sender, gameId, msg.value);\r\n    }\r\n\r\n    /**\r\n     * @dev Complete a game and distribute rewards\r\n     * @param gameId The game identifier\r\n     * @param won Whether the player won\r\n     */\r\n    function completeGame(uint256 gameId, bool won) external {\r\n        require(gamePlayer[gameId] == msg.sender, \"Not your game\");\r\n        \r\n        address player = msg.sender;\r\n        uint256 reward = won ? address(this).balance / 2 : 0;\r\n        \r\n        if (won && reward > 0) {\r\n            payable(player).transfer(reward);\r\n        }\r\n\r\n        emit GameCompleted(player, gameId, won, reward);\r\n    }\r\n}\r\n\r\n"
+      },
+      "project/contracts/MappableNFTs.sol": {
+        "content": "// SPDX-License-Identifier: MIT\r\npragma solidity ^0.8.28;\r\n\r\n/**\r\n * @title MappableNFTs\r\n * @dev Contract for NFT interactions that emit events for tracking\r\n */\r\ncontract MappableNFTs {\r\n    event NFTMinted(address indexed user, uint256 indexed tokenId, string tokenURI);\r\n    event NFTTransferred(address indexed from, address indexed to, uint256 indexed tokenId);\r\n\r\n    mapping(uint256 => address) public tokenOwner;\r\n    mapping(address => uint256) public userNFTCount;\r\n    uint256 public totalSupply;\r\n\r\n    /**\r\n     * @dev Mint a new NFT\r\n     * @param tokenURI The URI of the NFT metadata\r\n     */\r\n    function mintNFT(string memory tokenURI) external {\r\n        uint256 tokenId = totalSupply + 1;\r\n        tokenOwner[tokenId] = msg.sender;\r\n        userNFTCount[msg.sender]++;\r\n        totalSupply++;\r\n\r\n        emit NFTMinted(msg.sender, tokenId, tokenURI);\r\n    }\r\n\r\n    /**\r\n     * @dev Transfer an NFT to another address\r\n     * @param to The address to transfer to\r\n     * @param tokenId The token ID to transfer\r\n     */\r\n    function transferNFT(address to, uint256 tokenId) external {\r\n        require(tokenOwner[tokenId] == msg.sender, \"Not the owner\");\r\n        require(to != address(0), \"Invalid address\");\r\n\r\n        address from = msg.sender;\r\n        tokenOwner[tokenId] = to;\r\n        userNFTCount[from]--;\r\n        userNFTCount[to]++;\r\n\r\n        emit NFTTransferred(from, to, tokenId);\r\n    }\r\n}\r\n\r\n"
+      },
+      "project/contracts/MappableStores.sol": {
+        "content": "// SPDX-License-Identifier: MIT\r\npragma solidity ^0.8.28;\r\n\r\n/**\r\n * @title MappableStores\r\n * @dev Contract for store/e-commerce interactions that emit events for tracking\r\n */\r\ncontract MappableStores {\r\n    event PurchaseMade(address indexed buyer, uint256 indexed itemId, uint256 amount, uint256 price);\r\n    event ItemListed(address indexed seller, uint256 indexed itemId, uint256 price, string itemName);\r\n\r\n    struct Item {\r\n        address seller;\r\n        uint256 price;\r\n        string name;\r\n        bool exists;\r\n    }\r\n\r\n    mapping(uint256 => Item) public items;\r\n    mapping(address => uint256) public userPurchaseCount;\r\n    uint256 public totalItems;\r\n    uint256 public itemCounter;\r\n\r\n    /**\r\n     * @dev List a new item for sale\r\n     * @param itemName The name of the item\r\n     * @param price The price in wei\r\n     */\r\n    function listItem(string memory itemName, uint256 price) external {\r\n        require(price > 0, \"Price must be greater than 0\");\r\n        \r\n        uint256 itemId = itemCounter + 1;\r\n        items[itemId] = Item({\r\n            seller: msg.sender,\r\n            price: price,\r\n            name: itemName,\r\n            exists: true\r\n        });\r\n        \r\n        itemCounter++;\r\n        totalItems++;\r\n\r\n        emit ItemListed(msg.sender, itemId, price, itemName);\r\n    }\r\n\r\n    /**\r\n     * @dev Purchase an item\r\n     * @param itemId The item identifier\r\n     * @param amount The quantity to purchase\r\n     */\r\n    function purchaseItem(uint256 itemId, uint256 amount) external payable {\r\n        require(items[itemId].exists, \"Item does not exist\");\r\n        require(msg.value >= items[itemId].price * amount, \"Insufficient payment\");\r\n\r\n        address buyer = msg.sender;\r\n        userPurchaseCount[buyer] += amount;\r\n        \r\n        // Transfer payment to seller\r\n        payable(items[itemId].seller).transfer(msg.value);\r\n\r\n        emit PurchaseMade(buyer, itemId, amount, items[itemId].price);\r\n    }\r\n}\r\n\r\n"
+      }
+    }
+  }
+}

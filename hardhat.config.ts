@@ -17,11 +17,14 @@ const config: HardhatUserConfig = {
   networks: {
     hardhat: {
       chainId: 1337,
+      type: "http",
+      url: "http://127.0.0.1:8545",
     },
     somnia_testnet: {
       url: process.env.SOMNIA_RPC_TESTNET || "https://dream-rpc.somnia.network/",
       chainId: 50312,
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      type: "http",
     },
   },
   // Note: For contract verification on Somnia, use the explorer directly:

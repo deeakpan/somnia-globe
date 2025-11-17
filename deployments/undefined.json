@@ -1,0 +1,10 @@
+{
+  "chainId": 50312,
+  "deployer": "0x042943aefD5BFE42936b9fB575f5E1eeddFF1666",
+  "contracts": {
+    "MappableNFTs": "0xdb2e90a12c374a74ee4fd43eada93e262855af9c",
+    "MappableGames": "0x31d50a55ae8bd9b812af6a559fda05cb9050e57f",
+    "MappableStores": "0xd65c80881b5baa3eaf6b7cb2c385f8268f1cdeee"
+  },
+  "timestamp": "2025-11-16T16:57:00.797Z"
+}
