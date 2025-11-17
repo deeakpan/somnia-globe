@@ -85,15 +85,14 @@ export async function initializeVolumeTracking(): Promise<void> {
     checkForNewProjects();
   }, 30000); // Check every 30 seconds
 
+  // Run cleanup immediately on startup (to clean overdue wallets from previous session)
+  console.log('🧹 Running initial cleanup on startup...');
+  await runCleanupAndUpdate();
+
   // Run cleanup and update Supabase every 1 hour
   setInterval(async () => {
     await runCleanupAndUpdate();
   }, 60 * 60 * 1000); // 1 hour
-
-  // Run initial cleanup after 1 minute (to let things settle)
-  setTimeout(async () => {
-    await runCleanupAndUpdate();
-  }, 60 * 1000); // 1 minute
 }
 
 /**
@@ -134,15 +133,16 @@ async function runCleanupAndUpdate(): Promise<void> {
   try {
     console.log('\n🧹 Running cleanup and updating Supabase...');
     
-    // Clean up old wallets and get updated counts
-    const updates = await cleanupOldWallets();
+    // Clean up old wallets (older than 24 hours) and get updated counts
+    const { updates, totalRemoved, projectsCleaned } = await cleanupOldWallets();
     
-    if (updates.length === 0) {
-      console.log('   No projects to update');
+    if (totalRemoved === 0) {
+      console.log('   ✅ No wallets to clean (all wallets are within 24 hours)');
       return;
     }
 
-    console.log(`   Found ${updates.length} project(s) to update`);
+    console.log(`   🗑️  Removed ${totalRemoved} wallet(s) older than 24 hours from ${projectsCleaned} project(s)`);
+    console.log(`   📊 Updating ${updates.length} project(s) in Supabase...`);
 
     // Batch update Supabase with new counts
     await batchUpdateProjectVolumes(updates);

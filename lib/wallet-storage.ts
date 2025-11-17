@@ -237,18 +237,23 @@ export async function recordWalletInteraction(
 /**
  * Clean up wallets older than 24 hours and return updated counts
  */
-export async function cleanupOldWallets(): Promise<
-  Array<{ projectId: string; uniqueWallets: number; totalTransactions: number; lastInteractionAt: string }>
-> {
+export async function cleanupOldWallets(): Promise<{
+  updates: Array<{ projectId: string; uniqueWallets: number; totalTransactions: number; lastInteractionAt: string }>;
+  totalRemoved: number;
+  projectsCleaned: number;
+}> {
   return withLock(async () => {
     const data = await loadData();
     const cutoff = Date.now() - 24 * 60 * 60 * 1000; // 24 hours ago
     const updates: Array<{ projectId: string; uniqueWallets: number; totalTransactions: number; lastInteractionAt: string }> = [];
+    let totalRemoved = 0;
+    let projectsCleaned = 0;
 
     for (const projectId in data) {
       const project = data[projectId];
       const wallets = project.wallets;
       let removedCount = 0;
+      const beforeCount = Object.keys(wallets).length;
 
       // Remove wallets older than 24 hours
       for (const wallet in wallets) {
@@ -259,8 +264,10 @@ export async function cleanupOldWallets(): Promise<
         }
       }
 
-      // Only update if we removed wallets or if project exists
-      if (removedCount > 0 || Object.keys(wallets).length > 0) {
+      // Only update if we removed wallets (something was cleaned)
+      if (removedCount > 0) {
+        projectsCleaned++;
+        totalRemoved += removedCount;
         updates.push({
           projectId,
           uniqueWallets: Object.keys(wallets).length,
@@ -270,10 +277,16 @@ export async function cleanupOldWallets(): Promise<
       }
     }
 
-    // Save cleaned data
-    await saveData(data);
+    // Save cleaned data (only if something was removed)
+    if (totalRemoved > 0) {
+      await saveData(data);
+    }
 
-    return updates;
+    return {
+      updates,
+      totalRemoved,
+      projectsCleaned,
+    };
   });
 }
 
