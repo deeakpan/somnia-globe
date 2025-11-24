@@ -8,7 +8,8 @@
 
 import { subscribeToProjectEvents, unsubscribeAll, EventData } from './somnia-streams';
 import { getAllProjects, batchUpdateProjectVolumes, recalculateRankings, Project } from './supabase';
-import { recordWalletInteraction, cleanupOldWallets } from './wallet-storage';
+import { recordWalletInteraction, cleanupOldWallets, getAllProjectStats } from './wallet-storage';
+import { initializePushNotifications, sendPushToProjectSubscribers } from './push-notifications';
 
 // Track which projects we're already subscribed to
 const subscribedProjectIds = new Set<string>();
@@ -66,6 +67,9 @@ export async function checkForNewProjects(): Promise<void> {
 export async function initializeVolumeTracking(): Promise<void> {
   console.log('Initializing volume tracking...');
 
+  // Initialize push notifications
+  initializePushNotifications();
+
   // Load existing unique wallets from database (if you have a wallet_tracking table)
   // For now, we'll start fresh on each restart
   
@@ -88,6 +92,11 @@ export async function initializeVolumeTracking(): Promise<void> {
   // Run cleanup immediately on startup (to clean overdue wallets from previous session)
   console.log('🧹 Running initial cleanup on startup...');
   await runCleanupAndUpdate();
+
+  // Sync to Supabase every 5 minutes (for UI updates)
+  setInterval(async () => {
+    await syncToSupabase();
+  }, 5 * 60 * 1000); // 5 minutes
 
   // Run cleanup and update Supabase every 1 hour
   setInterval(async () => {
@@ -123,6 +132,56 @@ async function handleProjectEvent(event: EventData): Promise<void> {
     console.log(`   (Wallet already tracked)`);
     console.log(`   Unique wallets: ${uniqueWallets}, Total transactions: ${totalTransactions}`);
   }
+
+  // Send push notifications to users monitoring this project
+  // Only sends if percentage change meets their threshold
+  try {
+    const { sent, failed, skipped } = await sendPushToProjectSubscribers(
+      projectId,
+      uniqueWallets, // Use unique_wallets as the volume metric
+      {
+        title: 'Volume Update',
+        body: `Project volume changed`,
+        icon: '/favicon.ico',
+        tag: `project-${projectId}-${uniqueWallets}`,
+        url: `/detail/${projectId}`,
+        projectId: projectId,
+        eventType: event.eventName,
+        transactionHash: event.transactionHash,
+        requireInteraction: false,
+      }
+    );
+
+    if (sent > 0) {
+      console.log(`   📤 Sent ${sent} notification(s) to subscribers`);
+    }
+    if (skipped > 0) {
+      console.log(`   ⏭️  Skipped ${skipped} user(s) (threshold not met)`);
+    }
+  } catch (error) {
+    // Don't fail the event processing if push fails
+    console.warn('Failed to send push notifications:', error);
+  }
+}
+
+/**
+ * Sync all project stats to Supabase (without cleanup)
+ * This runs every 5 minutes for UI updates
+ */
+async function syncToSupabase(): Promise<void> {
+  try {
+    const allStats = await getAllProjectStats();
+    if (allStats.length === 0) {
+      return; // No projects to sync
+    }
+
+    console.log(`\n📊 Syncing ${allStats.length} project(s) to Supabase...`);
+    await batchUpdateProjectVolumes(allStats);
+    await recalculateRankings();
+    console.log('✅ Sync complete');
+  } catch (error) {
+    console.error('❌ Error syncing to Supabase:', error);
+  }
 }
 
 /**
@@ -136,16 +195,18 @@ async function runCleanupAndUpdate(): Promise<void> {
     // Clean up old wallets (older than 24 hours) and get updated counts
     const { updates, totalRemoved, projectsCleaned } = await cleanupOldWallets();
     
-    if (totalRemoved === 0) {
+    if (totalRemoved > 0) {
+      console.log(`   🗑️  Removed ${totalRemoved} wallet(s) older than 24 hours from ${projectsCleaned} project(s)`);
+    } else {
       console.log('   ✅ No wallets to clean (all wallets are within 24 hours)');
-      return;
     }
 
-    console.log(`   🗑️  Removed ${totalRemoved} wallet(s) older than 24 hours from ${projectsCleaned} project(s)`);
-    console.log(`   📊 Updating ${updates.length} project(s) in Supabase...`);
+    // Always sync all project stats to Supabase (not just cleaned ones)
+    const allStats = await getAllProjectStats();
+    console.log(`   📊 Syncing ${allStats.length} project(s) to Supabase...`);
 
-    // Batch update Supabase with new counts
-    await batchUpdateProjectVolumes(updates);
+    // Batch update Supabase with all current counts
+    await batchUpdateProjectVolumes(allStats);
 
     // Recalculate rankings
     await recalculateRankings();

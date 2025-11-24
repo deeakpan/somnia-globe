@@ -314,3 +314,36 @@ export async function getProjectStats(projectId: string): Promise<{
   });
 }
 
+/**
+ * Get all project stats (for syncing to Supabase)
+ * Returns stats for all projects in the tracking data
+ */
+export async function getAllProjectStats(): Promise<Array<{
+  projectId: string;
+  uniqueWallets: number;
+  totalTransactions: number;
+  lastInteractionAt: string;
+}>> {
+  return withLock(async () => {
+    const data = await loadData();
+    const stats: Array<{
+      projectId: string;
+      uniqueWallets: number;
+      totalTransactions: number;
+      lastInteractionAt: string;
+    }> = [];
+
+    for (const projectId in data) {
+      const project = data[projectId];
+      stats.push({
+        projectId,
+        uniqueWallets: Object.keys(project.wallets).length,
+        totalTransactions: project.total_transactions,
+        lastInteractionAt: project.last_interaction_at || new Date().toISOString(),
+      });
+    }
+
+    return stats;
+  });
+}
+

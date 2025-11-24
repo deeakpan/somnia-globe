@@ -13,11 +13,17 @@
     "compile": "hardhat compile",
     "deploy": "hardhat run scripts/deploy.ts --network somnia_testnet",
     "deploy:local": "hardhat run scripts/deploy.ts --network hardhat",
-    "interact:nft": "tsx scripts/interact-nft.ts"
+    "interact:nft": "tsx scripts/interact-nft.ts",
+    "interact:games": "tsx scripts/interact-games.ts",
+    "shuffle:nft": "tsx scripts/shuffle-nft.ts",
+    "shuffle:games": "tsx scripts/shuffle-games.ts",
+    "generate:vapid-keys": "tsx scripts/generate-vapid-keys.ts"
   },
   "dependencies": {
     "@somnia-chain/streams": "^0.10.5",
     "@supabase/supabase-js": "^2.81.1",
+    "@turf/bbox": "^7.3.0",
+    "@turf/boolean-point-in-polygon": "^7.3.0",
     "@turf/centroid": "^7.2.0",
     "@turf/helpers": "^7.2.0",
     "@types/d3": "^7.4.3",
@@ -34,7 +40,8 @@
     "react-dom": "19.2.0",
     "react-leaflet": "^5.0.0",
     "three": "^0.181.1",
-    "viem": "^2.39.0"
+    "viem": "^2.39.0",
+    "web-push": "^3.6.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

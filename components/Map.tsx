@@ -6,6 +6,9 @@ import 'leaflet/dist/leaflet.css';
 import { getTop194Projects, Project } from '@/lib/supabase';
 import { getCategoryColor } from '@/lib/category-colors';
 import { centroid } from '@turf/centroid';
+import { point } from '@turf/helpers';
+import bbox from '@turf/bbox';
+import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 
 const COUNTRIES_GEOJSON_URL = 'https://d2ad6b4ur7yvpq.cloudfront.net/naturalearth-3.3.0/ne_50m_admin_0_countries.geojson';
 
@@ -122,6 +125,33 @@ const Map = () => {
     }
   }, [getISOCode]);
 
+  // Helper function to generate random points within a polygon
+  const generatePointsInPolygon = useCallback((geometry: any, count: number): Array<[number, number]> => {
+    const points: Array<[number, number]> = [];
+    if (count === 0) return points;
+    
+    const bounds = bbox(geometry);
+    // bbox returns [minLng, minLat, maxLng, maxLat]
+    const [minLng, minLat, maxLng, maxLat] = bounds;
+    
+    let attempts = 0;
+    const maxAttempts = count * 20; // Try up to 20x the desired count for better coverage
+    
+    while (points.length < count && attempts < maxAttempts) {
+      const lng = minLng + Math.random() * (maxLng - minLng);
+      const lat = minLat + Math.random() * (maxLat - minLat);
+      const testPoint = point([lng, lat]);
+      
+      // Check if point is inside the polygon
+      if (booleanPointInPolygon(testPoint, geometry)) {
+        points.push([lat, lng]); // Leaflet uses [lat, lng]
+      }
+      attempts++;
+    }
+    
+    return points;
+  }, []);
+
   // Function to update country colors and markers based on projects
   const updateMapWithProjects = useCallback(() => {
     if (!countriesLayerRef.current || !markersLayerRef.current) return;
@@ -153,23 +183,44 @@ const Map = () => {
           weight: 1,
         });
 
-        // Calculate accurate centroid using Turf.js
+        // Calculate total unique wallets for all projects in this country
+        const totalWallets = countryProjects.reduce((sum, p) => sum + (p.unique_wallets || 0), 0);
+        
+        // Cap at 100 markers max
+        const markerCount = Math.min(totalWallets, 100);
+        
+        // Generate random points within the country polygon
+        const markerPoints = generatePointsInPolygon(feature.geometry, markerCount);
+        
+        // Create tiny markers for each wallet (capped at 100)
+        markerPoints.forEach(([lat, lng]) => {
+          const marker = L.circleMarker([lat, lng], {
+            radius: 4, // Bolder markers
+            fillColor: color,
+            color: '#fff', // White border for contrast
+            weight: 1.5, // Thicker border
+            fillOpacity: 0.9, // More opaque
+            interactive: false, // Don't make them clickable to reduce clutter
+          });
+          marker.addTo(markersLayerRef.current!);
+        });
+
+        // Create a single popup marker at the centroid for interaction
         const centroidPoint = centroid(feature.geometry);
         const center = L.latLng(centroidPoint.geometry.coordinates[1], centroidPoint.geometry.coordinates[0]);
         
-        const marker = L.circleMarker(center, {
-          radius: Math.min(8 + countryProjects.length * 2, 20),
-          fillColor: color,
-          color: '#fff',
-          weight: 2,
-          fillOpacity: 0.8,
+        // Invisible marker for popup (or very small)
+        const popupMarker = L.circleMarker(center, {
+          radius: 0,
+          fillOpacity: 0,
+          interactive: true,
         });
 
         // Create dark-themed popup with project info
         const popupContent = `
           <div style="color: #fff; min-width: 250px; background: #1a1a1d; padding: 12px; border-radius: 8px;">
             <h3 style="margin: 0 0 8px 0; font-weight: bold; color: #fff; font-size: 16px;">${countryName}</h3>
-            <p style="margin: 0 0 12px 0; color: #9ca3af; font-size: 13px;">${countryProjects.length} project${countryProjects.length > 1 ? 's' : ''}</p>
+            <p style="margin: 0 0 12px 0; color: #9ca3af; font-size: 13px;">${countryProjects.length} project${countryProjects.length > 1 ? 's' : ''} • ${totalWallets} wallet${totalWallets !== 1 ? 's' : ''}${totalWallets > 100 ? ' (showing 100 markers)' : ''}</p>
             ${countryProjects.map(p => `
               <div style="margin: 8px 0; padding: 10px; background: #262629; border-radius: 6px; border-left: 3px solid ${color};">
                 <strong style="color: #fff; font-size: 14px; display: block; margin-bottom: 4px;">${p.project_name}</strong>
@@ -181,11 +232,11 @@ const Map = () => {
           </div>
         `;
         
-        marker.bindPopup(popupContent, {
+        popupMarker.bindPopup(popupContent, {
           className: 'dark-popup',
           maxWidth: 300,
         });
-        marker.addTo(markersLayerRef.current);
+        popupMarker.addTo(markersLayerRef.current);
       } else {
         // Default style for countries without projects
         (layer as L.Path).setStyle({
@@ -199,7 +250,7 @@ const Map = () => {
 
     // Update labels after markers
     updateCountryLabels();
-  }, [projectsByCountry, getISOCode, updateCountryLabels]);
+  }, [projectsByCountry, getISOCode, updateCountryLabels, generatePointsInPolygon]);
 
   useEffect(() => {
     if (!mapContainerRef.current) return;

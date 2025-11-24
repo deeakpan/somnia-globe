@@ -1,0 +1,37 @@
+{
+  "name": "Somlink - Somnia Blockchain Tracker",
+  "short_name": "Somlink",
+  "description": "Real-time tracking of Somnia blockchain events and project volumes",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["finance", "utilities"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Map View",
+      "short_name": "Map",
+      "description": "View projects on the world map",
+      "url": "/map",
+      "icons": [{ "src": "/favicon.ico", "sizes": "any" }]
+    },
+    {
+      "name": "Tree View",
+      "short_name": "Tree",
+      "description": "View project hierarchy",
+      "url": "/tree",
+      "icons": [{ "src": "/favicon.ico", "sizes": "any" }]
+    }
+  ]
+}
+

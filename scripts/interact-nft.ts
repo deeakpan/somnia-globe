@@ -53,11 +53,12 @@ async function main() {
 
   // Get current total supply
   try {
-    const totalSupply = await publicClient.readContract({
+    const totalSupply = (await publicClient.readContract({
       address: contractAddress,
-      abi: abi,
+      abi: abi as any,
       functionName: "totalSupply",
-    });
+      args: [],
+    })) as bigint;
     console.log("Current total supply:", totalSupply.toString());
   } catch (error) {
     console.log("Could not read totalSupply (contract may not be initialized)");
@@ -68,7 +69,7 @@ async function main() {
   console.log("\n🎨 Minting NFT with URI:", tokenURI);
 
   const data = encodeFunctionData({
-    abi: abi,
+    abi: abi as any,
     functionName: "mintNFT",
     args: [tokenURI],
   });
@@ -79,6 +80,7 @@ async function main() {
     to: contractAddress,
     data: data,
     account,
+    chain: somniaDreamChain as any,
   });
 
   console.log("✅ Transaction hash:", hash);
@@ -94,18 +96,19 @@ async function main() {
   // Check for NFTMinted event
   if (receipt.logs && receipt.logs.length > 0) {
     console.log("\n📋 Events emitted:");
-    receipt.logs.forEach((log, index) => {
+    receipt.logs.forEach((log: any, index: number) => {
       console.log(`  Event ${index + 1}:`, log.topics[0]);
     });
   }
 
   // Get updated total supply
   try {
-    const newTotalSupply = await publicClient.readContract({
+    const newTotalSupply = (await publicClient.readContract({
       address: contractAddress,
-      abi: abi,
+      abi: abi as any,
       functionName: "totalSupply",
-    });
+      args: [],
+    })) as bigint;
     console.log("\n📊 New total supply:", newTotalSupply.toString());
   } catch (error) {
     console.log("Could not read new totalSupply");

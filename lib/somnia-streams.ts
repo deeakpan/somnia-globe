@@ -215,7 +215,7 @@ async function pollForEventsHTTP(
                 let walletAddress: string | undefined;
                 if (decoded.args) {
                   const args = decoded.args as any;
-                  walletAddress = args.from || args.to || args.user || args.account || args[0];
+                  walletAddress = args.from || args.to || args.user || args.account || args.player || args[0];
                   if (typeof walletAddress === 'object' && walletAddress !== null) {
                     walletAddress = String(walletAddress);
                   }
@@ -232,6 +232,8 @@ async function pollForEventsHTTP(
                     timestamp: new Date(),
                   };
                   await onEvent(eventData);
+                } else {
+                  console.warn(`⚠️ Could not extract wallet address from event ${decoded.eventName || eventSig}. Args:`, decoded.args);
                 }
               } catch (error) {
                 console.error(`Error decoding log:`, error);
@@ -316,9 +318,9 @@ export async function subscribeToProjectEvents(
               let walletAddress: string | undefined;
               
               if (decoded.args) {
-                // Try to find address in args (common patterns: from, to, user, account)
+                // Try to find address in args (common patterns: from, to, user, account, player)
                 const args = decoded.args as any;
-                walletAddress = args.from || args.to || args.user || args.account || args[0];
+                walletAddress = args.from || args.to || args.user || args.account || args.player || args[0];
                 
                 // If it's an object, try to extract address
                 if (typeof walletAddress === 'object' && walletAddress !== null) {
